@@ -1,0 +1,62 @@
+name: Step 1 - Fetch Build Error
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Target repository (owner/repo)'
+        required: true
+      target_branch:
+        description: 'Target branch'
+        default: 'main'
+      commit_sha:
+        description: 'Commit SHA'
+        required: true
+      workflow_file:
+        description: 'Workflow file name'
+        default: 'ci.yml'
+      wait_for_build:
+        description: 'Wait for build to complete'
+        type: boolean
+        default: true
+
+jobs:
+  fetch-error:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install PyGithub
+
+      - name: Fetch build error
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/fetch_build_error.py \
+            --target-repo "${{ inputs.target_repo }}" \
+            --branch "${{ inputs.target_branch }}" \
+            --commit-sha "${{ inputs.commit_sha }}" \
+            --workflow-file "${{ inputs.workflow_file }}" \
+            --output-dir "build_errors" \
+            $([ "${{ inputs.wait_for_build }}" = "true" ] && echo "--wait" || echo "")
+
+      - name: Upload error log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-error-log
+          path: build_errors/*.log
+          retention-days: 7
+
+      - name: Show error summary
+        if: failure()
+        run: |
+          echo "## Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo "Check the uploaded artifact for full error log." >> $GITHUB_STEP_SUMMARY
